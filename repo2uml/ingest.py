@@ -71,7 +71,7 @@ def resolve_source(source: str, workdir: Path | None = None) -> tuple[Path, bool
         )
     org, repo = parsed
     base = workdir or Path(tempfile.gettempdir())
-    dest = Path(tempfile.mkdtemp(prefix=f"ghubuml-{repo}-", dir=str(base)))
+    dest = Path(tempfile.mkdtemp(prefix=f"repo2uml-{repo}-", dir=str(base)))
     # clone into subdir to keep mkdtemp wrapper for easy cleanup
     target = dest / repo
     try:

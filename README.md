@@ -1,4 +1,4 @@
-# ghubUML — automatic architecture mapper
+# repo2uml — automatic architecture mapper
 
 Give it an **unknown GitHub repo**, get back **UML component diagrams** (PlantUML):
 
@@ -31,9 +31,9 @@ pip install -e .
 ## Usage
 
 ```bash
-ghubuml https://github.com/org/repo --out ./diagrams
-ghubuml org/repo --out ./diagrams --max-nodes 10
-ghubuml ./local-checkout --out ./diagrams --no-render
+repo2uml https://github.com/org/repo --out ./diagrams
+repo2uml org/repo --out ./diagrams --max-nodes 10
+repo2uml ./local-checkout --out ./diagrams --no-render
 ```
 
 Options:

@@ -1,4 +1,4 @@
-"""CLI: ghubuml <source> --out ./diagrams"""
+"""CLI: repo2uml <source> --out ./diagrams"""
 from __future__ import annotations
 
 import argparse
@@ -35,7 +35,7 @@ def parse_module(root: Path, rel: Path):
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
-        prog="ghubuml",
+        prog="repo2uml",
         description="Automatic architecture mapper: GitHub repo -> UML (PlantUML).",
     )
     ap.add_argument("source", help="local dir, https://github.com/org/repo, or org/repo")
@@ -116,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
                           ignore_errors=True) if False else None
             # repo_root = tmpdir/repo ; clean whole tmpdir
             tmpdir = repo_root.parent
-            if "ghubuml-" in str(tmpdir):
+            if "repo2uml-" in str(tmpdir):
                 shutil.rmtree(str(tmpdir), ignore_errors=True)
 
 

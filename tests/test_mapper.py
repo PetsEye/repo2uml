@@ -1,8 +1,8 @@
 """Smoke tests: parsers, graph, clustering, PlantUML emission."""
-from ghubuml import abstract as ab
-from ghubuml import emit_puml as emit
-from ghubuml import graph as gmod
-from ghubuml.parsers import parse_go, parse_java, parse_python, parse_typescript
+from repo2uml import abstract as ab
+from repo2uml import emit_puml as emit
+from repo2uml import graph as gmod
+from repo2uml.parsers import parse_go, parse_java, parse_python, parse_typescript
 
 
 def test_python_routes_models():
