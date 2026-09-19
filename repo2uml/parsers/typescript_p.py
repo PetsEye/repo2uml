@@ -19,6 +19,7 @@ ROUTE_RE = re.compile(
 MODEL_RE = re.compile(
     r"@(?:Entity|Schema|Model)\s*\(|extends\s+(?:BaseEntity|Model|Document)"
     r"|(?:defineModel|new\s+(?:Schema|mongoose\.Schema))"
+    r"|(?:pgTable|sqliteTable|mysqlTable)\s*\("
 )
 TEST_RE = re.compile(r"(?:^|/)(?:tests?|__tests__|e2e|spec)(?:/|$)|\.(?:test|spec)\.")
 

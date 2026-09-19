@@ -1,6 +1,7 @@
 """Inventory: file walk, language + framework detection."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -10,6 +11,9 @@ IGNORE_DIRS = {
     ".next", ".nuxt", "coverage", ".idea", ".vscode",
 }
 IGNORE_SUFFIXES = (".min.js", ".bundle.js", ".map")
+# tool configs carry no architecture signal (eslint/vite/next/jest/...)
+# and .d.ts files are pure declarations with no imports
+IGNORE_FILE_RE = re.compile(r"\.config\.[^.]+$|\.d\.ts$", re.IGNORECASE)
 TEST_MARKERS = ("test", "tests", "__tests__", "spec", "e2e", "testing")
 
 EXT_LANG = {
@@ -47,6 +51,8 @@ def _is_ignored(path: Path, parts: tuple[str, ...]) -> bool:
     if any(d in IGNORE_DIRS for d in parts):
         return True
     if any(str(path).endswith(s) for s in IGNORE_SUFFIXES):
+        return True
+    if IGNORE_FILE_RE.search(path.name):
         return True
     return False
 
@@ -93,12 +99,7 @@ def scan(root: Path, max_files: int = 20000) -> Inventory:
             continue
         lang = EXT_LANG.get(path.suffix.lower())
         if lang is None:
-            # still record manifests for framework detection
-            if path.name in MANIFESTS:
-                pass
-            else:
-                continue
-        # skip tests for file list? keep but flag later; skip to reduce noise by default? keep.
+            continue  # manifests are read from disk for framework detection
         inv.files.append(rel)
         inv.languages[lang] = inv.languages.get(lang, 0) + 1
         count += 1

@@ -79,7 +79,105 @@ def modules_hint_classes(module: ModuleInfo) -> list[str]:
     return module.classes
 
 
-def cluster(modules: list[ModuleInfo], max_nodes: int = 8) -> list[Component]:
+# dirs that conventionally hold unrelated modules: split cohesive
+# file clusters out of them instead of one grab-bag node
+GRAB_BAG_DIRS = {
+    "lib", "libs", "utils", "util", "common", "shared", "helpers",
+    "helper", "core", "internal", "pkg", "base",
+}
+MIN_SPLIT_SIZE = 4  # groups smaller than this are never split
+LARGE_GROUP = 10  # non-grab-bag groups above this size may still split
+MIN_CHUNK = 2  # a chunk needs this many mutually-linked files to split out
+
+
+def _connected_chunks(files: list[str], file_graph: dict[str, set[str]]) -> list[list[str]]:
+    """Undirected connected components over internal edges, deterministically ordered."""
+    fset = set(files)
+    adj: dict[str, set[str]] = {f: set() for f in files}
+    for f in files:
+        for d in file_graph.get(f, ()):  # outgoing
+            if d in fset and d != f:
+                adj[f].add(d)
+                adj[d].add(f)
+    seen: set[str] = set()
+    chunks: list[list[str]] = []
+    for f in sorted(files):
+        if f in seen:
+            continue
+        stack, chunk = [f], []
+        while stack:
+            cur = stack.pop()
+            if cur in seen:
+                continue
+            seen.add(cur)
+            chunk.append(cur)
+            stack.extend(sorted(adj[cur] - seen))
+        chunks.append(sorted(chunk))
+    return sorted(chunks, key=lambda c: c[0])
+
+
+def _chunk_name(chunk: list[str], file_graph: dict[str, set[str]]) -> str:
+    """Name a chunk after its most-connected file's stem (deterministic)."""
+    cset = set(chunk)
+    def internal_degree(f: str) -> int:
+        out = len([d for d in file_graph.get(f, ()) if d in cset])
+        inn = len([s for s in chunk if f in file_graph.get(s, ())])
+        return out + inn
+    best = sorted(chunk, key=lambda f: (-internal_degree(f), f))[0]
+    stem = best.rsplit("/", 1)[-1].split(".")[0]
+    name = re.sub(r"[^A-Za-z0-9]+", "", stem.capitalize())
+    return name or "Core"
+
+
+def _cohesion_split(
+    comps: list[Component],
+    file_graph: dict[str, set[str]] | None,
+    by_path: dict[str, ModuleInfo],
+) -> list[Component]:
+    if not file_graph:
+        return comps
+    out: list[Component] = []
+    for c in comps:
+        if c.name in ("API", "Database") or len(c.files) < MIN_SPLIT_SIZE:
+            out.append(c)
+            continue
+        top = _top_dir(c.files[0]).lower() if c.files else ""
+        if top not in GRAB_BAG_DIRS and len(c.files) <= LARGE_GROUP:
+            out.append(c)
+            continue
+        chunks = [ch for ch in _connected_chunks(c.files, file_graph) if len(ch) >= MIN_CHUNK]
+        if not chunks:
+            out.append(c)
+            continue
+        taken = {f for ch in chunks for f in ch}
+        rest = sorted(set(c.files) - taken)
+        if not rest:
+            # everything chunked: keep the largest chunk under the original name
+            chunks.sort(key=lambda ch: (-len(ch), ch[0]))
+            keep, chunks = chunks[0], chunks[1:]
+            c.files = sorted(keep)
+            c.classes = sorted({cl for f in keep for cl in by_path.get(f, ModuleInfo(f, "")).classes})
+            out.append(c)
+        else:
+            c.files = rest
+            c.classes = sorted({cl for f in rest for cl in by_path.get(f, ModuleInfo(f, "")).classes})
+            out.append(c)
+        for ch in chunks:
+            name = _chunk_name(ch, file_graph)
+            out.append(Component(
+                name=name,
+                layer=c.layer,
+                files=sorted(ch),
+                classes=sorted({cl for f in ch for cl in by_path.get(f, ModuleInfo(f, "")).classes}),
+            ))
+    return out
+
+
+def cluster(
+    modules: list[ModuleInfo],
+    max_nodes: int = 8,
+    file_graph: dict[str, set[str]] | None = None,
+) -> list[Component]:
     groups: dict[str, Component] = {}
     for m in modules:
         if m.is_test:
@@ -97,6 +195,8 @@ def cluster(modules: list[ModuleInfo], max_nodes: int = 8) -> list[Component]:
             pass
 
     comps = list(groups.values())
+    by_path = {m.path: m for m in modules}
+    comps = _cohesion_split(comps, file_graph, by_path)
     # merge util/config-like small groups into neighbours later; first ensure Database exists
     has_db = any(c.name == "Database" for c in comps)
     stores = [c for c in comps if c.name.endswith("Store")]
