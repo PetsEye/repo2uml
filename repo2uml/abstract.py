@@ -31,7 +31,9 @@ class Component:
 
 def _top_dir(path: str) -> str:
     parts = path.split("/")
-    if len(parts) >= 2 and parts[0] in ("src", "lib", "app", "pkg", "internal", "backend", "server"):
+    # only descend into src/<domain>/... style paths; files directly under
+    # a source root (lib/*.js, pkg/*.go) group under the root itself
+    if len(parts) >= 3 and parts[0] in ("src", "lib", "app", "pkg", "internal", "backend", "server"):
         return parts[1]
     return parts[0] if len(parts) > 1 else "root"
 
@@ -177,12 +179,19 @@ def cluster(
     modules: list[ModuleInfo],
     max_nodes: int = 8,
     file_graph: dict[str, set[str]] | None = None,
+    entry_points: set[str] | None = None,
 ) -> list[Component]:
     groups: dict[str, Component] = {}
+    entries = entry_points or set()
     for m in modules:
         if m.is_test:
             continue
-        name, layer = _classify(m)
+        if m.path in entries:
+            # framework repos and re-export barrels define no routes;
+            # their entry files are still the architecture's front door
+            name, layer = "API", LAYER_API
+        else:
+            name, layer = _classify(m)
         c = groups.get(name)
         if c is None:
             c = groups[name] = Component(name=name, layer=layer)

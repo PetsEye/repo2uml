@@ -95,3 +95,44 @@ def test_grab_bag_cohesion_split():
     solo = ModuleInfo(path="src/auth/a.ts", language="typescript", classes=["A"])
     comps2 = ab.cluster([solo], max_nodes=8, file_graph={solo.path: set()})
     assert len(comps2) == 1
+
+
+def test_flat_source_root_groups_by_dir(tmp_path):
+    # lib/*.js (flat layout) must form one Lib group, not filename nodes
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "lib" / "application.js").write_text("module.exports = {};\n")
+    (tmp_path / "lib" / "request.js").write_text("module.exports = {};\n")
+    inv = inventory.scan(tmp_path)
+    assert sorted(f.as_posix() for f in inv.files) == ["lib/application.js", "lib/request.js"]
+    assert ab._top_dir("lib/application.js") == "lib"
+    assert ab._top_dir("src/auth/service.ts") == "auth"
+
+
+def test_examples_dir_ignored(tmp_path):
+    (tmp_path / "examples" / "auth").mkdir(parents=True)
+    (tmp_path / "examples" / "auth" / "index.js").write_text("var app = null;\n")
+    (tmp_path / "index.js").write_text("module.exports = {};\n")
+    inv = inventory.scan(tmp_path)
+    assert [f.as_posix() for f in inv.files] == ["index.js"]
+
+
+def test_entry_points_become_api():    # framework-style repo: no routes anywhere, entry file is the front door
+    idx = ModuleInfo(path="index.js", language="javascript", imports=["./lib/express"])
+    lib = ModuleInfo(path="lib/express.js", language="javascript", classes=["Express"])
+    comps = ab.cluster([idx, lib], max_nodes=8,
+                       file_graph={"index.js": {"lib/express.js"}, "lib/express.js": set()},
+                       entry_points={"index.js"})
+    by_name = {c.name: c for c in comps}
+    assert "API" in by_name and by_name["API"].files == ["index.js"]
+
+
+def test_routes_ignore_comments_and_req_res():
+    m = parse_typescript(
+        "lib/response.js",
+        "// app.get('/fake', () => {})\n"
+        "/* router.post('/also-fake', h) */\n"
+        "res.get('Content-Type');\n"
+        "const url = 'https://example.com/a';\n"
+        "r.post('/login', () => {});\n",
+    )
+    assert m.routes == ["/login"]

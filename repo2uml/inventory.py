@@ -9,6 +9,9 @@ IGNORE_DIRS = {
     "node_modules", "vendor", "dist", "build", ".git", ".hg", ".svn",
     "__pycache__", ".venv", "venv", ".tox", "target", "out",
     ".next", ".nuxt", "coverage", ".idea", ".vscode",
+    # demos/samples/docs are not architecture
+    "examples", "example", "demo", "demos", "sample", "samples",
+    "docs", "doc", "website",
 }
 IGNORE_SUFFIXES = (".min.js", ".bundle.js", ".map")
 # tool configs carry no architecture signal (eslint/vite/next/jest/...)
