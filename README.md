@@ -24,6 +24,14 @@ Deterministic, offline, zero third-party dependencies — pure Python stdlib sta
 Requires Python 3.9+.
 
 ```bash
+pip install repo2uml
+```
+
+Or from source:
+
+```bash
+git clone https://github.com/petseye/repo2uml.git
+cd repo2uml
 pip install -e .
 # or: pipx install -e .   (isolated CLI install)
 ```

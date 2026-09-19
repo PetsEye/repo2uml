@@ -5,9 +5,31 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "repo2uml"
 version = "0.1.0"
-description = "Automatic architecture mapper: GitHub repo -> UML (PlantUML)"
+description = "Automatic architecture mapper: point it at any repo, get UML component diagrams (PlantUML)"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "petseye" }]
+keywords = ["uml", "plantuml", "architecture", "static-analysis", "visualization", "github"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Documentation",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
 requires-python = ">=3.9"
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/petseye/repo2uml"
+Repository = "https://github.com/petseye/repo2uml"
+Issues = "https://github.com/petseye/repo2uml/issues"
 
 [project.scripts]
 repo2uml = "repo2uml.cli:main"
