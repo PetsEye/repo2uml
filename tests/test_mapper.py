@@ -37,3 +37,24 @@ def test_go_java_parse():
     assert g.classes and g.routes
     j = parse_java("AuthController.java", "import com.app.AuthService;\n@RestController\npublic class AuthController {}")
     assert "AuthController" in j.classes
+
+
+def test_nextjs_at_alias_import():
+    # "@/..." path alias must not collapse to "" (crashed build_graph with IndexError)
+    m = parse_typescript(
+        "src/components/button.tsx",
+        'import { cn } from "@/lib/utils";\nimport { cva } from "class-variance-authority";\n',
+    )
+    assert "" not in m.imports
+    assert any(i.startswith("@/") for i in m.imports)
+    utils = parse_typescript("src/lib/utils.ts", "export function cn() {}")
+    fg = gmod.build_graph([m, utils])  # must not raise
+    assert fg["src/components/button.tsx"] == {"src/lib/utils.ts"}
+
+
+def test_empty_import_never_crashes_graph():
+    from repo2uml.parsers.base import ModuleInfo
+    m = ModuleInfo(path="a.ts", language="typescript", imports=["", "   ", "./b"])
+    b = ModuleInfo(path="b.ts", language="typescript")
+    fg = gmod.build_graph([m, b])  # must not raise
+    assert fg["a.ts"] == {"b.ts"}

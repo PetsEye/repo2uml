@@ -28,12 +28,14 @@ def parse_typescript(rel: str, text: str) -> ModuleInfo:
     info = ModuleInfo(path=rel, language=lang, is_test=bool(TEST_RE.search(rel)))
     for rx in IMPORT_RES:
         for m in rx.finditer(text):
-            raw = m.group(1)
-                # keep relative imports as-is; external -> top package
-            if raw.startswith("."):
+            raw = m.group(1).strip()
+            if not raw:
+                continue
+            # keep relative and @/-aliased imports as-is; external -> top package
+            if raw.startswith(".") or raw.startswith("@/"):
                 info.imports.append(raw)
             else:
-                info.imports.append(raw.split("/")[0].lstrip("@"))
+                info.imports.append(raw.split("/")[0].lstrip("@") or raw)
     for m in CLASS_RE.finditer(text):
         info.classes.append(m.group(1))
     for m in FUNC_RE.finditer(text):

@@ -25,10 +25,14 @@ def parse_go(rel: str, text: str) -> ModuleInfo:
         for line in m.group(1).splitlines():
             im = IMPORT_LINE_RE.search(line)
             if im:
-                raw = im.group(1)
+                raw = im.group(1).strip()
+                if not raw:
+                    continue
                 info.imports.append(raw.split("/")[-1].split(".")[0] if "/" in raw else raw)
     for im in IMPORT_ONE_RE.finditer(text):
-        raw = im.group(1)
+        raw = im.group(1).strip()
+        if not raw:
+            continue
         info.imports.append(raw.split("/")[-1] if "/" in raw else raw)
     for stm in STRUCT_RE.finditer(text):
         info.classes.append(stm.group(1))

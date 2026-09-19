@@ -9,6 +9,8 @@ from .parsers.base import ModuleInfo
 
 def _norm_import(raw: str) -> str:
     raw = raw.strip()
+    if not raw:
+        return ""
     # strip alias: '"pkg" as x' already handled; keep first token
     return raw.split()[0].strip("'\"")
 
