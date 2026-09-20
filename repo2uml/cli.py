@@ -45,6 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--title", default="Architecture")
     ap.add_argument("--no-render", action="store_true", help="skip svg/png render, .puml only")
     ap.add_argument("--format", choices=["svg", "png"], default="svg")
+    ap.add_argument("--stats", action="store_true", help="print dropped-import breakdown")
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return ap
 
@@ -66,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
             print("No supported source files found.", file=sys.stderr)
             return 2
 
-        file_graph = gmod.build_graph(modules)
+        file_graph, gstats = gmod.build_graph(modules)
         comps = ab.cluster(modules, max_nodes=args.max_nodes, file_graph=file_graph,
                            entry_points=set(inv.entry_points))
         edges = ab.component_edges(comps, modules, file_graph)
@@ -89,12 +90,18 @@ def main(argv: list[str] | None = None) -> int:
                 for c in comps
             ],
             "edges": sorted([list(e) for e in edges]),
+            "stats": gstats,
         }
         (out / "architecture.json").write_text(json.dumps(ir, indent=2))
 
         print(f"Languages: {inv.languages}")
         print(f"Frameworks: {inv.frameworks or ['(none detected)']}")
         print(f"Files analyzed: {len(modules)}  Components: {len(comps)}")
+        print(f"Imports resolved: {gstats['resolved']}/{gstats['imports_total']} "
+              f"({gstats['resolution_rate']:.0%})")
+        if args.stats:
+            for reason, n in gstats["dropped"].items():
+                print(f"  dropped/{reason}: {n}")
         print()
         print(emit.emit_ascii(comps, edges))
         print()

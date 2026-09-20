@@ -1,0 +1,13 @@
+{
+  "dropped": {
+    "empty": 0,
+    "external": 197,
+    "stem_collision": 0,
+    "unresolvable": 93
+  },
+  "imports_total": 314,
+  "resolution_rate": 0.076,
+  "resolved": 24,
+  "resolved_relative": 24,
+  "resolved_stem": 0
+}

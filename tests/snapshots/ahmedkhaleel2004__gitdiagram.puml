@@ -1,0 +1,28 @@
+@startuml
+title Architecture (next, react)
+skinparam componentStyle rectangle
+
+component [API (22 files)] as API <<entryPoint>>
+component [Components (23 files)] as Components
+component [Credentialdialog (8 files)] as Credentialdialog
+component [Features (10 files)] as Features
+component [Graphplanner (17 files)] as Graphplanner
+component [Hooks (9 files)] as Hooks
+component [Other (20 files)] as Other
+component [Repositoryworkspace (16 files)] as Repositoryworkspace
+component [Server (36 files)] as Server
+
+API --> Components
+API --> Credentialdialog
+API --> Features
+API --> Graphplanner
+API --> Hooks
+API --> Other
+API --> Repositoryworkspace
+API --> Server
+Components --> Server
+Graphplanner --> Other
+Hooks --> Components
+Other --> Components
+Server --> Other
+@enduml

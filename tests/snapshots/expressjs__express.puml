@@ -1,0 +1,9 @@
+@startuml
+title Architecture (express)
+skinparam componentStyle rectangle
+
+component [API] as API <<entryPoint>>
+component [Lib (6 files)] as Lib
+
+API --> Lib
+@enduml

@@ -1,0 +1,24 @@
+@startuml
+title Architecture (flask)
+skinparam componentStyle rectangle
+
+component [API (5 files)] as API <<entryPoint>>
+component [AuthService (2 files)] as AuthService
+component [Flask (15 files)] as Flask
+component [FlaskStore (2 files)] as FlaskStore
+component [Database] as Database <<database>>
+
+API --> AuthService
+API --> Flask
+API --> FlaskStore
+AuthService --> API
+AuthService --> Flask
+AuthService --> FlaskStore
+Flask --> API
+Flask --> AuthService
+Flask --> FlaskStore
+FlaskStore --> API
+FlaskStore --> AuthService
+FlaskStore --> Database
+FlaskStore --> Flask
+@enduml

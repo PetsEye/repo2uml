@@ -30,7 +30,7 @@ def test_end_to_end_clustering():
         parse_python("sim/loop.py", "class Simulation: ..."),
         parse_python("store/users.py", "class User(Base): __tablename__='u'"),
     ]
-    fg = gmod.build_graph(mods)
+    fg, _ = gmod.build_graph(mods)
     comps = ab.cluster(mods, max_nodes=8)
     names = {c.name for c in comps}
     assert "API" in names and "Database" in names
@@ -55,14 +55,14 @@ def test_nextjs_at_alias_import():
     assert "" not in m.imports
     assert any(i.startswith("@/") for i in m.imports)
     utils = parse_typescript("src/lib/utils.ts", "export function cn() {}")
-    fg = gmod.build_graph([m, utils])  # must not raise
+    fg, _ = gmod.build_graph([m, utils])  # must not raise
     assert fg["src/components/button.tsx"] == {"src/lib/utils.ts"}
 
 
 def test_empty_import_never_crashes_graph():
     m = ModuleInfo(path="a.ts", language="typescript", imports=["", "   ", "./b"])
     b = ModuleInfo(path="b.ts", language="typescript")
-    fg = gmod.build_graph([m, b])  # must not raise
+    fg, _ = gmod.build_graph([m, b])  # must not raise
     assert fg["a.ts"] == {"b.ts"}
 
 
@@ -86,7 +86,7 @@ def test_grab_bag_cohesion_split():
                        classes=["Stray"])
     extra = ModuleInfo(path="src/lib/extra.ts", language="typescript")
     mods = [billing, usage, stray, extra]
-    fg = gmod.build_graph(mods)
+    fg, _ = gmod.build_graph(mods)
     comps = ab.cluster(mods, max_nodes=8, file_graph=fg)
     names = {c.name for c in comps}
     assert "Lib" in names  # singletons stay
