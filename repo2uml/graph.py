@@ -110,10 +110,17 @@ def build_graph(
         "resolved_stem": 0,
         "resolved_alias": 0,
         "resolved_package": 0,
+        "resolved_symbol": 0,
         "package_links": 0,
         "dropped": {"empty": 0, "external": 0, "stem_collision": 0, "unresolvable": 0},
     }
     graph: dict[str, set[str]] = {m.path: set() for m in modules}
+    # symbol -> defining files (resolves DI refs: @Bean types, fx.Provide args)
+    symbol_index: dict[str, list[str]] = defaultdict(list)
+    for m in modules:
+        for sym in list(m.classes) + list(m.functions):
+            if sym and sym not in ("(model)", "(route)", "(blueprint)"):
+                symbol_index[sym].append(m.path)
     # dir -> member files (for package-dir imports like Go's pkg/auth)
     dir_index: dict[str, list[str]] = defaultdict(list)
     for m in modules:
@@ -128,6 +135,9 @@ def build_graph(
             continue
         if m.language == "go":
             key = f"go:{PurePosixPath(m.path).parent}:{m.package}"
+        elif m.language in ("java", "kotlin"):
+            # mixed Java/Kotlin sources share packages (Spring Boot norm)
+            key = f"jvm:{m.package}"
         else:
             key = f"{m.language}:{m.package}"
         by_package[key].append(m.path)
@@ -201,8 +211,23 @@ def build_graph(
                 stats["resolved_stem"] += 1
             else:
                 stats["dropped"]["stem_collision"] += 1
+    # DI refs (@Bean return types, @Autowired fields, fx.Provide args):
+    # exact symbol match to the defining file; ambiguous symbols drop
+    for m in modules:
+        for ref in m.di_refs:
+            defs = [f for f in symbol_index.get(ref, []) if f != m.path]
+            if len(defs) == 1:
+                graph[m.path].add(defs[0])
+                stats["resolved"] += 1
+                stats["resolved_symbol"] += 1
+                stats["imports_total"] += 1
+            elif defs:
+                stats["imports_total"] += 1
+                stats["dropped"]["stem_collision"] += 1
     total = stats["imports_total"]
-    stats["resolution_rate"] = round(stats["resolved"] / total, 3) if total else 1.0
+    linked = stats["package_links"]
+    denom = total + linked
+    stats["resolution_rate"] = round((stats["resolved"] + linked) / denom, 3) if denom else 1.0
     return graph, stats
 
 

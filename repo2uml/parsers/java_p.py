@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from .base import ModuleInfo
+from .base import ModuleInfo, merge_symbols
 
 IMPORT_RE = re.compile(r"import\s+(?:static\s+)?([\w.]+)\s*;")
 PACKAGE_RE = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.M)
@@ -13,7 +13,20 @@ ANNOT_ROUTE = re.compile(r"@(?:GetMapping|PostMapping|PutMapping|DeleteMapping|P
 ANNOT_SVC = re.compile(r"@(?:Service|Component|Controller|RestController)\b")
 ANNOT_REPO = re.compile(r"@(?:Repository|Dao)\b")
 ANNOT_ENTITY = re.compile(r"@(?:Entity|Table|Document)\b")
+BEAN_RE = re.compile(r"@Bean\b[^{;]*?([\w.]+)(?:<[^;{}]*>)?\s+(\w+)\s*\(")
+INJECT_FIELD_RE = re.compile(
+    r"@(?:Autowired|Inject|Resource)\s+(?:(?:private|protected|public|final|static|transient)\s+)*"
+    r"([\w.]+)(?:<[^;]*>)?\s+\w+\s*[;=]")
+FEIGN_RE = re.compile(r"""@FeignClient\s*\(\s*(?:name\s*=\s*|value\s*=\s*)?["']([^"']+)""")
+CLASS_PREFIX_RE = re.compile(
+    r"""@RequestMapping\s*\(\s*(?:(?:value|path)\s*=\s*)?["']([^"']*)["']""")
+METHOD_ROUTE_RE = re.compile(
+    r"""@(?:GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|RequestMapping)(?:\s*\(\s*(?:(?:value|path)\s*=\s*)?["']([^"']*)["']?)?""")
 TEST_RE = re.compile(r"(?:^|/)tests?(?:/|$)|Test\.java$|Tests\.java$")
+
+
+def _simple(name: str) -> str:
+    return name.split(".")[-1].split("<")[0]
 
 
 def parse_java(rel: str, text: str) -> ModuleInfo:
@@ -25,13 +38,45 @@ def parse_java(rel: str, text: str) -> ModuleInfo:
         # the dependency is always the last component (the class):
         # import com.example.app.AuthService -> AuthService
         info.imports.append(m.group(1).split(".")[-1])
+    # Spring wiring as DI refs (resolved to defining files via symbol index):
+    # @Bean return types, @Autowired/@Inject field types, constructor params
+    for m in BEAN_RE.finditer(text):
+        info.di_refs.append(_simple(m.group(1)))
+    for m in INJECT_FIELD_RE.finditer(text):
+        info.di_refs.append(_simple(m.group(1)))
+    for m in FEIGN_RE.finditer(text):
+        if m.group(1) not in info.external_services:
+            info.external_services.append(m.group(1))
     for m in CLASS_RE.finditer(text):
         info.classes.append(m.group(1))
+    merge_symbols(info, "java", text)
+    # constructor injection: public ClassName(Store s, ...) -> param types
+    for cls in info.classes:
+        for m in re.finditer(r"public\s+" + re.escape(cls) + r"\s*\(([^;{}]*)\)", text):
+            for param in m.group(1).split(","):
+                toks = [t for t in re.split(r"\s+", param.strip()) if t not in ("final", "")]
+                if len(toks) >= 2:
+                    info.di_refs.append(_simple(toks[-2]))
     for m in METHOD_RE.finditer(text):
         info.functions.append(m.group(1))
     if ANNOT_ROUTE.search(text):
-        for m in re.finditer(r"""@(?:GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|RequestMapping)(?:\s*\(\s*(?:value\s*=\s*)?["']([^"']*)""", text):
-            info.routes.append(m.group(1) or "(route)")
+        # class-level @RequestMapping("/api") prefix + method-level paths
+        prefixes: list[tuple[int, str]] = []
+        for m in CLASS_PREFIX_RE.finditer(text):
+            tail = text[m.end():m.end() + 400]
+            if re.search(r"\b(?:class|interface|enum|record)\b", tail):
+                prefixes.append((m.start(), m.group(1)))
+        for m in METHOD_ROUTE_RE.finditer(text):
+            path = m.group(1) or "(route)"
+            pre = ""
+            for pos, p in prefixes:
+                if pos < m.start():
+                    pre = p
+                else:
+                    break
+            if pre and path.startswith("/") and not path.startswith(pre):
+                path = pre.rstrip("/") + path
+            info.routes.append(path)
         if not info.routes:
             info.routes.append("(route)")
     if ANNOT_ENTITY.search(text):

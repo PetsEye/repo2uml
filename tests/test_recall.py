@@ -121,3 +121,122 @@ def test_go_same_package_clique_per_dir():
     fg, stats = gmod.build_graph([a, b, other])
     assert fg["auth/a.go"] == {"auth/b.go"}
     assert stats["package_links"] == 2
+
+
+def test_proto_service_and_messages():
+    from repo2uml.parsers import parse_proto
+    m = parse_proto("billing/billing.proto",
+                    'syntax = "proto3";\npackage billing.v1;\n'
+                    'message ChargeReq { string id = 1; }\n'
+                    'service Billing { rpc Charge(ChargeReq) returns (ChargeReq); }\n')
+    assert "Billing" in m.classes and "Charge" in m.routes
+    assert "ChargeReq" in m.models and m.package == "billing.v1"
+
+
+def test_prisma_models():
+    from repo2uml.parsers import parse_prisma
+    m = parse_prisma("prisma/schema.prisma",
+                     "model User {\n id String @id\n posts Post[]\n}\nmodel Post {\n id String @id\n}\n")
+    assert set(m.models) == {"User", "Post"}
+    assert m.has_models
+
+
+def test_kotlin_basics_and_jvm_clique():
+    from repo2uml.parsers import parse_kotlin
+    k = parse_kotlin("src/UserService.kt",
+                     "package com.app;\nimport com.app.UserRepo;\n"
+                     "class UserService(private val repo: UserRepo) {\n"
+                     "  suspend fun find(id: String): String { return id; }\n}\n")
+    assert k.package == "com.app" and "UserService" in k.classes
+    assert "find" in k.functions and k.imports == ["UserRepo"]
+    j = parse_java("src/UserRepo.java", "package com.app;\npublic class UserRepo {}\n")
+    fg, stats = gmod.build_graph([k, j])
+    assert fg["src/UserService.kt"] == {"src/UserRepo.java"}
+
+
+def test_spring_bean_and_autowired_wire_files():
+    cfg = parse_java("src/Cfg.java",
+                     "package com.app;\nimport com.app.Store;\n"
+                     "@Configuration\npublic class Cfg {\n"
+                     "  @Bean\n  public Store store() { return new Store(); }\n}\n")
+    assert "Store" in cfg.di_refs
+    ctrl = parse_java("src/Ctrl.java",
+                      "package com.app;\n"
+                      "public class Ctrl {\n"
+                      "  @Autowired\n  private Store store;\n"
+                      "  public Ctrl(OrderSvc svc) {}\n"
+                      "}\n")
+    assert "Store" in ctrl.di_refs and "OrderSvc" in ctrl.di_refs
+    store = parse_java("src/Store.java", "package com.app;\npublic class Store {}\n")
+    svc = parse_java("src/OrderSvc.java", "package com.app;\npublic class OrderSvc {}\n")
+    fg, stats = gmod.build_graph([cfg, ctrl, store, svc])
+    # same-package clique links everything; DI edges must be among them
+    assert {"src/Store.java"} <= fg["src/Cfg.java"]
+    assert {"src/Store.java", "src/OrderSvc.java"} <= fg["src/Ctrl.java"]
+    assert stats["resolved_symbol"] == 3
+
+
+def test_spring_requestmapping_prefix_composes():
+    m = parse_java("src/C.java",
+                   "@RestController\n@RequestMapping(\"/api\")\npublic class C {\n"
+                   "  @GetMapping(\"/u\")\n  public String u() { return \"x\"; }\n}\n")
+    assert "/api/u" in m.routes
+
+
+def test_feign_client_recorded():
+    m = parse_java("src/Billing.java",
+                   '@FeignClient(name = "billing", url = "${u}")\npublic interface Billing {}\n')
+    assert m.external_services == ["billing"]
+
+
+def test_go_fx_wire_and_ent_models():
+    w = parse_go("main.go",
+                 "package main\nimport \"go.uber.org/fx\"\n"
+                 "func main() { fx.New(fx.Provide(NewStore, NewHandler)) }\n")
+    assert set(w.di_refs) == {"NewStore", "NewHandler"}
+    s = parse_go("store/store.go", "package store\nfunc NewStore() {}\n")
+    h = parse_go("handler/h.go", "package handler\nfunc NewHandler() {}\n")
+    fg, stats = gmod.build_graph([w, s, h])
+    assert fg["main.go"] == {"store/store.go", "handler/h.go"}
+    assert stats["resolved_symbol"] == 2
+    ent = parse_go("ent/user.go",
+                   "package ent\ntype User struct {\n ID string `pg:\"id,pk\"`\n}\n")
+    assert "User" in ent.models
+    chi = parse_go("r.go", "package r\nfunc m() {\n r.Route(\"/u\", func(r chi.Router) {\n r.Get(\"/{id}\", h) }) }\n")
+    assert "/u/{id}" in chi.routes
+
+
+def test_treesitter_seam_upgrades_symbols_when_installed():
+    ts = pytest.importorskip("tree_sitter")
+    pytest.importorskip("tree_sitter_java")
+    from repo2uml.tree_sitter_backend import available, extract_symbols
+    assert available("java")
+    # package-private method: invisible to the regex parser, visible to TS
+    sym = extract_symbols("java", "package com.app;\npublic class C {\n String hidden() { return \"x\"; }\n}\n")
+    assert sym is not None
+    assert "C" in sym["classes"] and "hidden" in sym["functions"]
+    assert sym["package"] == "com.app"
+    # parser unions backend symbols over regex results
+    m = parse_java("src/C.java", "package com.app;\npublic class C {\n String hidden() { return \"x\"; }\n}\n")
+    assert "hidden" in m.functions
+
+
+def test_treesitter_absent_is_silent():
+    # backend never raises: unknown langs -> None, garbage -> empty result
+    from repo2uml import tree_sitter_backend as tsb
+    assert tsb.extract_symbols("cobol", "IDENTIFICATION DIVISION.") is None
+    assert tsb.available("cobol") is False
+
+
+def test_nested_samples_segment_is_not_ignored(tmp_path):
+    # org.springframework.samples: nested `samples` is package structure
+    deep = tmp_path / "src" / "main" / "java" / "org" / "springframework" / "samples"
+    deep.mkdir(parents=True)
+    (deep / "Owner.java").write_text("public class Owner {}\n")
+    (tmp_path / "samples").mkdir()
+    (tmp_path / "samples" / "demo.py").write_text("X = 1\n")
+    from repo2uml import inventory
+    inv = inventory.scan(tmp_path)
+    names = sorted(f.as_posix() for f in inv.files)
+    assert any(n.endswith("Owner.java") for n in names)
+    assert not any(n.startswith("samples/") for n in names)

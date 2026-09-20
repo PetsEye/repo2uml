@@ -9,7 +9,10 @@ IGNORE_DIRS = {
     "node_modules", "vendor", "dist", "build", ".git", ".hg", ".svn",
     "__pycache__", ".venv", "venv", ".tox", "target", "out",
     ".next", ".nuxt", "coverage", ".idea", ".vscode",
-    # demos/samples/docs are not architecture
+}
+# demos/samples/docs are not architecture — but only when shallow: a NESTED
+# `samples` segment is usually package structure (org.springframework.samples)
+SHALLOW_IGNORE_DIRS = {
     "examples", "example", "demo", "demos", "sample", "samples",
     "docs", "doc", "website",
 }
@@ -22,7 +25,8 @@ TEST_MARKERS = ("test", "tests", "__tests__", "spec", "e2e", "testing")
 EXT_LANG = {
     ".ts": "typescript", ".tsx": "typescript", ".js": "javascript",
     ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
-    ".py": "python", ".go": "go", ".java": "java",
+    ".py": "python", ".go": "go", ".java": "java", ".kt": "kotlin",
+    ".kts": "kotlin", ".proto": "proto", ".prisma": "prisma",
 }
 
 # manifest file -> (framework, language)
@@ -56,6 +60,8 @@ class Inventory:
 
 def _is_ignored(path: Path, parts: tuple[str, ...]) -> bool:
     if any(d in IGNORE_DIRS for d in parts):
+        return True
+    if any(d in SHALLOW_IGNORE_DIRS for d in parts[:2]):
         return True
     if any(str(path).endswith(s) for s in IGNORE_SUFFIXES):
         return True

@@ -14,7 +14,8 @@ from . import aliases as alias_mod
 from . import emit_puml as emit
 from . import graph as gmod
 from . import ingest, inventory
-from .parsers import parse_go, parse_java, parse_python, parse_typescript
+from .parsers import (parse_go, parse_java, parse_kotlin, parse_proto,
+                       parse_prisma, parse_python, parse_typescript)
 
 
 def parse_module(root: Path, rel: Path):
@@ -32,6 +33,12 @@ def parse_module(root: Path, rel: Path):
         return parse_go(rel_s, text)
     if suf == ".java":
         return parse_java(rel_s, text)
+    if suf in (".kt", ".kts"):
+        return parse_kotlin(rel_s, text)
+    if suf == ".proto":
+        return parse_proto(rel_s, text)
+    if suf == ".prisma":
+        return parse_prisma(rel_s, text)
     return None
 
 
@@ -115,6 +122,7 @@ def main(argv: list[str] | None = None) -> int:
             "languages": inv.languages,
             "frameworks": inv.frameworks,
             "entry_points": inv.entry_points,
+            "external_services": sorted({s for m in modules for s in m.external_services}),
             "components": [
                 {"name": c.name, "layer": c.layer, "files": sorted(c.files), "classes": sorted(set(c.classes))}
                 for c in comps

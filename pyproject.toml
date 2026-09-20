@@ -26,6 +26,9 @@ classifiers = [
 requires-python = ">=3.9"
 dependencies = []
 
+[project.optional-dependencies]
+treesitter = ["tree-sitter", "tree-sitter-java", "tree-sitter-go", "tree-sitter-typescript"]
+
 [project.urls]
 Homepage = "https://github.com/petseye/repo2uml"
 Repository = "https://github.com/petseye/repo2uml"

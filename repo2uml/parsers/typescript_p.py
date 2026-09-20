@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from .base import ModuleInfo
+from .base import ModuleInfo, merge_symbols
 
 IMPORT_RES = [
     re.compile(r"""import\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]"""),
@@ -55,6 +55,7 @@ def parse_typescript(rel: str, text: str) -> ModuleInfo:
     for m in FUNC_RE.finditer(text):
         if m.group(1) not in info.classes:
             info.functions.append(m.group(1))
+    merge_symbols(info, lang, text)
     # NestJS-style methods inside classes
     for m in re.finditer(r"@(?:Get|Post|Put|Delete|Patch|Route)\s*\(\s*['\"`]([^'\"`]*)", text):
         info.routes.append(m.group(1) or "(route)")
