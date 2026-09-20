@@ -54,6 +54,7 @@ Options:
 | `--format` | `svg` | Render format (`svg` or `png`) |
 | `--no-render` | off | Skip rendering, emit `.puml` only |
 | `--title` | `Architecture` | Diagram title |
+| `--stats` | off | Print import-resolution breakdown (resolved/dropped-by-reason) |
 
 Outputs in `--out`:
 
