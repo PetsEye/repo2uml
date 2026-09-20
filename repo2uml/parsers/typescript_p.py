@@ -43,12 +43,13 @@ def parse_typescript(rel: str, text: str) -> ModuleInfo:
             raw = m.group(1).strip()
             if not raw:
                 continue
-            # keep relative and aliased imports as-is (@/, ~/, #xxx);
-            # external -> top package
-            if raw.startswith((".", "@/", "~/", "#")):
+            # keep relative, aliased and scoped imports intact
+            # (@org/pkg/sub needed whole for monorepo maps; npm externals
+            # fall back to the last segment in the graph either way)
+            if raw.startswith((".", "@/", "~/", "#", "@")):
                 info.imports.append(raw)
             else:
-                info.imports.append(raw.split("/")[0].lstrip("@") or raw)
+                info.imports.append(raw.split("/")[0] or raw)
     for m in CLASS_RE.finditer(text):
         info.classes.append(m.group(1))
     for m in FUNC_RE.finditer(text):

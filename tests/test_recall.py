@@ -64,7 +64,6 @@ def test_python_init_chain():
     assert fg["main.py"] == {"pkg/__init__.py"}
 
 
-@pytest.mark.xfail(strict=True, reason="same-package Java needs no import (Phase 3)")
 def test_java_same_package_no_import():
     a = parse_java("src/com/app/A.java", "package com.app;\npublic class A { B b; }\n")
     b = parse_java("src/com/app/B.java", "package com.app;\npublic class B {}\n")
@@ -72,7 +71,6 @@ def test_java_same_package_no_import():
     assert fg["src/com/app/A.java"] == {"src/com/app/B.java"}
 
 
-@pytest.mark.xfail(strict=True, reason="long Java imports truncated to parts[2] (Phase 3)")
 def test_java_long_import_resolves():
     a = parse_java("src/C.java", "import com.example.app.AuthService;\npublic class C {}\n")
     svc = parse_java("src/AuthService.java", "public class AuthService {}\n")
@@ -80,7 +78,6 @@ def test_java_long_import_resolves():
     assert fg["src/C.java"] == {"src/AuthService.java"}
 
 
-@pytest.mark.xfail(strict=True, reason="ambiguous same-top stems picked arbitrarily (Phase 3)")
 def test_stem_collision_drops_and_counts():
     a = ModuleInfo(path="src/a.py", language="python", imports=["utils"])
     u1 = ModuleInfo(path="src/auth/utils.py", language="python")
@@ -95,3 +92,32 @@ def test_go_module_basename_still_resolves_when_unique():
     auth = parse_go("pkg/auth/auth.go", "package auth\n")
     fg, _ = _graph([main, auth])
     assert fg["main.go"] == {"pkg/auth/auth.go"}
+
+
+def test_ts_monorepo_cross_package():
+    web = parse_typescript(
+        "apps/web/a.ts", "import { x } from '@myorg/pkg';\nimport { y } from '@myorg/pkg/sub';\n")
+    idx = parse_typescript("packages/pkg/index.ts", "export const x = 1;\n")
+    sub = parse_typescript("packages/pkg/sub.ts", "export const y = 1;\n")
+    pkgs = {"@myorg/pkg": "packages/pkg"}
+    fg, stats = gmod.build_graph([web, idx, sub], packages=pkgs)
+    assert fg["apps/web/a.ts"] == {"packages/pkg/index.ts", "packages/pkg/sub.ts"}
+    assert stats["resolved_package"] == 2
+
+
+def test_go_nested_module_dir_link():
+    main = parse_go("cmd/svc/main.go", 'package main\nimport "example.com/mono/pkgA"\n')
+    foo = parse_go("pkgA/foo.go", "package pkga\n")
+    pkgs = {"example.com/mono": ""}
+    fg, stats = gmod.build_graph([main, foo], packages=pkgs)
+    assert fg["cmd/svc/main.go"] == {"pkgA/foo.go"}
+    assert stats["resolved_package"] == 1
+
+
+def test_go_same_package_clique_per_dir():
+    a = parse_go("auth/a.go", "package auth\n")
+    b = parse_go("auth/b.go", "package auth\n")
+    other = parse_go("store/main.go", "package main\n")
+    fg, stats = gmod.build_graph([a, b, other])
+    assert fg["auth/a.go"] == {"auth/b.go"}
+    assert stats["package_links"] == 2

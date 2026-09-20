@@ -88,7 +88,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
         file_graph, gstats = gmod.build_graph(
-            modules, aliases=alias_mod.load_aliases(repo_root))
+            modules, aliases=alias_mod.load_aliases(repo_root),
+            packages=inv.packages)
         comps = ab.cluster(modules, max_nodes=args.max_nodes, file_graph=file_graph,
                            entry_points=set(inv.entry_points))
         edges = ab.component_edges(comps, modules, file_graph)

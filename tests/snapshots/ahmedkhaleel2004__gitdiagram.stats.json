@@ -2,17 +2,19 @@
   "dropped": {
     "empty": 0,
     "external": 278,
-    "stem_collision": 3,
+    "stem_collision": 4,
     "unresolvable": 17
   },
-  "files_ignored": 44,
+  "files_ignored": 15,
   "files_skipped_oversized": 0,
   "files_truncated": false,
-  "files_unsupported": 35,
+  "files_unsupported": 34,
   "imports_total": 789,
-  "resolution_rate": 0.622,
-  "resolved": 491,
+  "package_links": 0,
+  "resolution_rate": 0.621,
+  "resolved": 490,
   "resolved_alias": 367,
+  "resolved_package": 0,
   "resolved_relative": 115,
-  "resolved_stem": 9
+  "resolved_stem": 8
 }

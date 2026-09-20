@@ -6,6 +6,7 @@ import re
 from .base import ModuleInfo
 
 IMPORT_BLOCK_RE = re.compile(r"import\s*\(\s*(.*?)\)", re.S)
+PACKAGE_RE = re.compile(r"^\s*package\s+(\w+)", re.M)
 IMPORT_ONE_RE = re.compile(r'import\s+"([^"]+)"')
 IMPORT_LINE_RE = re.compile(r'"([^"]+)"')
 STRUCT_RE = re.compile(r"type\s+(\w+)\s+struct")
@@ -20,6 +21,9 @@ TEST_RE = re.compile(r"(?:^|/)tests?(?:/|$)|_test\.go$")
 
 def parse_go(rel: str, text: str) -> ModuleInfo:
     info = ModuleInfo(path=rel, language="go", is_test=bool(TEST_RE.search(rel)))
+    pm = PACKAGE_RE.search(text)
+    if pm:
+        info.package = pm.group(1)
     m = IMPORT_BLOCK_RE.search(text)
     if m:
         for line in m.group(1).splitlines():
@@ -28,12 +32,14 @@ def parse_go(rel: str, text: str) -> ModuleInfo:
                 raw = im.group(1).strip()
                 if not raw:
                     continue
-                info.imports.append(raw.split("/")[-1].split(".")[0] if "/" in raw else raw)
+                # keep the full path: the graph strips go.mod module prefixes
+                # and falls back to the basename stem when unique
+                info.imports.append(raw)
     for im in IMPORT_ONE_RE.finditer(text):
         raw = im.group(1).strip()
         if not raw:
             continue
-        info.imports.append(raw.split("/")[-1] if "/" in raw else raw)
+        info.imports.append(raw)
     for stm in STRUCT_RE.finditer(text):
         info.classes.append(stm.group(1))
     for fm in FUNC_RE.finditer(text):

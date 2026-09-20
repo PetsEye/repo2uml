@@ -46,6 +46,28 @@ def try_candidate(base: str, all_files: set[str]) -> str | None:
     return None
 
 
+def _resolve_package(
+    imp: str,
+    packages: dict[str, str],
+    all_files: set[str],
+    dir_index: dict[str, list[str]],
+) -> list[str]:
+    """Resolve `@org/pkg/sub` / `example.com/mod/pkg` to member files."""
+    for spec in sorted(packages, key=len, reverse=True):
+        if imp != spec and not imp.startswith(spec + "/"):
+            continue
+        rest = imp[len(spec):].lstrip("/")
+        base = packages[spec]
+        cand = (base + "/" + rest).strip("/") if rest else base
+        hit = try_candidate(cand, all_files)
+        if hit:
+            return [hit]
+        members = [f for f in dir_index.get(cand, [])]
+        if members:
+            return sorted(members)
+    return []
+
+
 def resolve_relative(importer: str, raw: str, all_files: set[str]) -> str | None:
     """Resolve './x', '../y' to a repo-relative file if it exists."""
     if not raw.startswith("."):
@@ -57,6 +79,7 @@ def resolve_relative(importer: str, raw: str, all_files: set[str]) -> str | None
 def build_graph(
     modules: list[ModuleInfo],
     aliases: list[tuple[str, list[str]]] | None = None,
+    packages: dict[str, str] | None = None,
 ) -> tuple[dict[str, set[str]], dict]:
     """file -> set(files it depends on). External pkgs ignored (not files).
 
@@ -86,9 +109,36 @@ def build_graph(
         "resolved_relative": 0,
         "resolved_stem": 0,
         "resolved_alias": 0,
+        "resolved_package": 0,
+        "package_links": 0,
         "dropped": {"empty": 0, "external": 0, "stem_collision": 0, "unresolvable": 0},
     }
     graph: dict[str, set[str]] = {m.path: set() for m in modules}
+    # dir -> member files (for package-dir imports like Go's pkg/auth)
+    dir_index: dict[str, list[str]] = defaultdict(list)
+    for m in modules:
+        dir_index[str(PurePosixPath(m.path).parent)].append(m.path)
+    # same-package clique (Java needs no import within a package; Go files
+    # in one dir share one package): every pair in a package gets an edge.
+    # Java packages are globally unique; Go package names repeat per dir
+    # (package main everywhere), so Go cliques are per-directory.
+    by_package: dict[str, list[str]] = defaultdict(list)
+    for m in modules:
+        if not m.package:
+            continue
+        if m.language == "go":
+            key = f"go:{PurePosixPath(m.path).parent}:{m.package}"
+        else:
+            key = f"{m.language}:{m.package}"
+        by_package[key].append(m.path)
+    for paths in by_package.values():
+        if len(paths) < 2:
+            continue
+        for a in paths:
+            for b in paths:
+                if a != b and b not in graph[a]:
+                    graph[a].add(b)
+                    stats["package_links"] += 1
     for m in modules:
         for raw in m.imports:
             imp = _norm_import(raw)
@@ -105,6 +155,16 @@ def build_graph(
             if imp.startswith("."):
                 # relative import pointing at nothing we scanned
                 stats["dropped"]["unresolvable"] += 1
+                continue
+            # monorepo packages (@org/pkg, go module paths): strip the
+            # mapped prefix, resolve the remainder under its directory
+            pkg_hit = _resolve_package(imp, packages or {}, all_files, dir_index)
+            if pkg_hit:
+                for t in pkg_hit:
+                    if t != m.path:
+                        graph[m.path].add(t)
+                stats["resolved"] += 1
+                stats["resolved_package"] += 1
                 continue
             # aliased imports (@/, ~/, #/, tsconfig paths) by path join
             alias_hit = alias_mod.resolve_alias(
@@ -124,19 +184,17 @@ def build_graph(
             if not cands:
                 stats["dropped"]["external"] += 1
                 continue
-            # avoid self + prefer same top dir
+            # avoid self + prefer same top dir; ambiguous (2+ viable targets)
+            # drops instead of an arbitrary first-hit (a wrong arrow is
+            # worse than a missing one for architecture HONESTY)
             top = m.path.split("/")[0] if "/" in m.path else ""
+            non_self = [c for c in cands if c != m.path]
+            same_top = [c for c in non_self if c.split("/")[0] == top]
             best = None
-            for c in cands:
-                if c == m.path:
-                    continue
-                if c.split("/")[0] == top:
-                    best = c
-                    break
-            if best is None:
-                non_self = [c for c in cands if c != m.path]
-                if len(non_self) == 1:
-                    best = non_self[0]
+            if len(same_top) == 1:
+                best = same_top[0]
+            elif not same_top and len(non_self) == 1:
+                best = non_self[0]
             if best:
                 graph[m.path].add(best)
                 stats["resolved"] += 1

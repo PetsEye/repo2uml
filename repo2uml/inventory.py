@@ -51,6 +51,7 @@ class Inventory:
     skipped_ignored: int = 0  # dirs/suffixes/config patterns
     skipped_unsupported: int = 0  # known files with unscanned extensions
     truncated: bool = False  # hit max_files cap
+    packages: dict[str, str] = field(default_factory=dict)  # import-spec -> dir
 
 
 def _is_ignored(path: Path, parts: tuple[str, ...]) -> bool:
@@ -61,6 +62,37 @@ def _is_ignored(path: Path, parts: tuple[str, ...]) -> bool:
     if IGNORE_FILE_RE.search(path.name):
         return True
     return False
+
+
+def _manifest_dir(root: Path, rel: Path) -> str:
+    parent = rel.parent.as_posix()
+    return "" if parent == "." else parent
+
+
+def _record_js_package(root: Path, rel: Path, packages: dict[str, str]) -> None:
+    """Map package.json name -> dir so @org/pkg imports resolve in monorepos."""
+    try:
+        import json as _json
+        data = _json.loads((root / rel).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    name = data.get("name") if isinstance(data, dict) else None
+    if isinstance(name, str) and name and name not in packages:
+        packages[name] = _manifest_dir(root, rel)
+
+
+GO_MOD_RE = re.compile(r"^\s*module\s+(\S+)", re.M)
+
+
+def _record_go_module(root: Path, rel: Path, packages: dict[str, str]) -> None:
+    """Map go.mod module path -> dir for nested-module monorepos."""
+    try:
+        text = (root / rel).read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return
+    m = GO_MOD_RE.search(text)
+    if m and m.group(1) not in packages:
+        packages[m.group(1)] = _manifest_dir(root, rel)
 
 
 def _detect_js_framework(root: Path, frameworks: list[str]) -> None:
@@ -106,7 +138,12 @@ def scan(root: Path, max_files: int = 20000) -> Inventory:
             continue
         lang = EXT_LANG.get(path.suffix.lower())
         if lang is None:
-            inv.skipped_unsupported += 1
+            if path.name == "package.json":
+                _record_js_package(root, rel, inv.packages)
+            elif path.name == "go.mod":
+                _record_go_module(root, rel, inv.packages)
+            else:
+                inv.skipped_unsupported += 1
             continue  # manifests are read from disk for framework detection
         inv.files.append(rel)
         inv.languages[lang] = inv.languages.get(lang, 0) + 1

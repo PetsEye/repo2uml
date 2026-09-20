@@ -14,6 +14,7 @@ class ModuleInfo:
     routes: list[str] = field(default_factory=list)
     models: list[str] = field(default_factory=list)
     is_test: bool = False
+    package: str = ""  # Java package / Go package name for same-package linking
 
     @property
     def has_routes(self) -> bool:

@@ -6,6 +6,7 @@ import re
 from .base import ModuleInfo
 
 IMPORT_RE = re.compile(r"import\s+(?:static\s+)?([\w.]+)\s*;")
+PACKAGE_RE = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.M)
 CLASS_RE = re.compile(r"(?:public\s+|protected\s+|private\s+)?(?:class|interface|enum|record)\s+(\w+)")
 METHOD_RE = re.compile(r"(?:public|protected|private)\s+(?:static\s+)?[\w<>\[\]]+\s+(\w+)\s*\(")
 ANNOT_ROUTE = re.compile(r"@(?:GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping|RequestMapping|Route)\b")
@@ -17,9 +18,13 @@ TEST_RE = re.compile(r"(?:^|/)tests?(?:/|$)|Test\.java$|Tests\.java$")
 
 def parse_java(rel: str, text: str) -> ModuleInfo:
     info = ModuleInfo(path=rel, language="java", is_test=bool(TEST_RE.search(rel)))
+    pm = PACKAGE_RE.search(text)
+    if pm:
+        info.package = pm.group(1)
     for m in IMPORT_RE.finditer(text):
-        parts = m.group(1).split(".")
-        info.imports.append(parts[2] if len(parts) > 3 and parts[0] in ("com", "org") else parts[-1])
+        # the dependency is always the last component (the class):
+        # import com.example.app.AuthService -> AuthService
+        info.imports.append(m.group(1).split(".")[-1])
     for m in CLASS_RE.finditer(text):
         info.classes.append(m.group(1))
     for m in METHOD_RE.finditer(text):
