@@ -56,13 +56,12 @@ def test_symlink_loop_terminates(tmp_path):
     assert any(str(f) == "real/a.py" for f in inv.files)
 
 
-@pytest.mark.xfail(strict=True, reason="bad source traceback (Phase 1: clean exit 2)")
 def test_bad_source_clean_exit(tmp_path, capsys):
     rc = cli.main(["not-a-repo!!!", "--out", str(tmp_path / "out"), "--no-render"])
     assert rc == 2
+    assert "error" in capsys.readouterr().err
 
 
-@pytest.mark.xfail(strict=True, reason="unwritable --out traceback (Phase 1: clean exit)")
 def test_unwritable_out_clean_exit(tmp_path):
     (tmp_path / "blocker").write_text("x")
     (tmp_path / "a.py").write_text("X = 1\n")

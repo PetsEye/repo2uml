@@ -48,6 +48,9 @@ class Inventory:
     languages: dict[str, int] = field(default_factory=dict)
     frameworks: list[str] = field(default_factory=list)
     entry_points: list[str] = field(default_factory=list)
+    skipped_ignored: int = 0  # dirs/suffixes/config patterns
+    skipped_unsupported: int = 0  # known files with unscanned extensions
+    truncated: bool = False  # hit max_files cap
 
 
 def _is_ignored(path: Path, parts: tuple[str, ...]) -> bool:
@@ -99,14 +102,17 @@ def scan(root: Path, max_files: int = 20000) -> Inventory:
         except ValueError:
             continue
         if _is_ignored(path, rel.parts):
+            inv.skipped_ignored += 1
             continue
         lang = EXT_LANG.get(path.suffix.lower())
         if lang is None:
+            inv.skipped_unsupported += 1
             continue  # manifests are read from disk for framework detection
         inv.files.append(rel)
         inv.languages[lang] = inv.languages.get(lang, 0) + 1
         count += 1
         if count >= max_files:
+            inv.truncated = True
             break
 
     frameworks: list[str] = []

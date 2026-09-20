@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -50,16 +51,34 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+MAX_FILE_BYTES = 2 * 1024 * 1024  # skip + count larger files (minified/generated)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
+    try:
+        out.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"error: cannot create output dir {out}: {e}", file=sys.stderr)
+        return 1
 
-    repo_root, is_temp = ingest.resolve_source(args.source)
+    try:
+        repo_root, is_temp = ingest.resolve_source(args.source)
+    except Exception as e:
+        print(f"error: cannot fetch source '{args.source}': {e}", file=sys.stderr)
+        return 2
     try:
         inv = inventory.scan(repo_root, max_files=args.max_files)
         modules = []
+        oversized = 0
         for rel in inv.files:
+            try:
+                if (repo_root / rel).stat().st_size > MAX_FILE_BYTES:
+                    oversized += 1
+                    continue
+            except OSError:
+                continue
             m = parse_module(repo_root, rel)
             if m is not None:
                 modules.append(m)
@@ -72,14 +91,22 @@ def main(argv: list[str] | None = None) -> int:
                            entry_points=set(inv.entry_points))
         edges = ab.component_edges(comps, modules, file_graph)
 
-        title = args.title
+        title = re.sub(r"[\r\n]+", " ", args.title)[:120]
         if inv.frameworks:
-            title = f"{args.title} ({', '.join(inv.frameworks)})"
+            title = f"{title} ({', '.join(inv.frameworks)})"
         component_puml = emit.emit_component(comps, edges, title=title)
-        package_puml = emit.emit_package(comps, title=f"{args.title} packages")
+        package_puml = emit.emit_package(comps, title=f"{title} packages")
 
-        (out / "architecture.puml").write_text(component_puml)
-        (out / "package.puml").write_text(package_puml)
+        try:
+            (out / "architecture.puml").write_text(component_puml)
+            (out / "package.puml").write_text(package_puml)
+        except OSError as e:
+            print(f"error: cannot write to {out}: {e}", file=sys.stderr)
+            return 1
+        gstats["files_skipped_oversized"] = oversized
+        gstats["files_ignored"] = inv.skipped_ignored
+        gstats["files_unsupported"] = inv.skipped_unsupported
+        gstats["files_truncated"] = inv.truncated
         ir = {
             "source": args.source,
             "languages": inv.languages,
@@ -97,6 +124,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Languages: {inv.languages}")
         print(f"Frameworks: {inv.frameworks or ['(none detected)']}")
         print(f"Files analyzed: {len(modules)}  Components: {len(comps)}")
+        cuts = []
+        if inv.skipped_ignored:
+            cuts.append(f"{inv.skipped_ignored} ignored")
+        if inv.skipped_unsupported:
+            cuts.append(f"{inv.skipped_unsupported} unsupported")
+        if oversized:
+            cuts.append(f"{oversized} oversized")
+        if inv.truncated:
+            cuts.append("truncated at --max-files")
+        if cuts:
+            print(f"Skipped: {', '.join(cuts)}")
         print(f"Imports resolved: {gstats['resolved']}/{gstats['imports_total']} "
               f"({gstats['resolution_rate']:.0%})")
         if args.stats:

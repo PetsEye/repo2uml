@@ -15,9 +15,21 @@ def sanitize(name: str) -> str:
     return s
 
 
+def unique_ids(names: list[str]) -> dict[str, str]:
+    """Map display names to collision-free PlantUML identifiers."""
+    idmap: dict[str, str] = {}
+    used: dict[str, int] = {}
+    for name in names:
+        base = sanitize(name)
+        n = used.get(base, 0)
+        used[base] = n + 1
+        idmap[name] = base if n == 0 else f"{base}{n + 1}"
+    return idmap
+
+
 def emit_component(comps: list[Component], edges: set[tuple[str, str]], title: str = "Architecture") -> str:
     lines = ["@startuml", f"title {title}", "skinparam componentStyle rectangle", ""]
-    idmap = {c.name: sanitize(c.name) for c in comps}
+    idmap = unique_ids([c.name for c in comps])
     # declare in layer order with stereotypes for readability
     for c in comps:
         stere = ""
