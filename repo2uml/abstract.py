@@ -270,21 +270,25 @@ def cluster(
     dropped = rest[len(keep_rest):]
     comps = pinned + keep_rest
     if dropped:
-        # return strays to the kept group from the same area (src/server chunk
-        # rejoins Server) — but never into a cohesion chunk (keeps it pure)
-        # and never into API/Database (keeps entry semantics pure);
-        # true miscellany lands in Other
+        # return strays to the kept group from the same area (src/server file
+        # rejoins Server) — routed per file so mixed groups split correctly;
+        # never into a cohesion chunk (keeps it pure) and never into
+        # API/Database (keeps entry semantics pure); true miscellany lands
+        # in Other
         other = Component(name="Other", layer=LAYER_LOGIC)
         for d in dropped:
-            area = _area(d.files)
-            target = next(
-                (k for k in keep_rest
-                 if k.name not in chunk_names and _area(k.files) == area),
-                None,
-            )
-            dest = target if target is not None else other
-            dest.files.extend(d.files)
-            dest.classes.extend(d.classes)
+            for f in d.files:
+                area = _area([f])
+                target = next(
+                    (k for k in keep_rest
+                     if k.name not in chunk_names and _area(k.files) == area),
+                    None,
+                )
+                dest = target if target is not None else other
+                dest.files.append(f)
+                for cl in by_path.get(f, ModuleInfo(f, "")).classes:
+                    if cl not in dest.classes:
+                        dest.classes.append(cl)
         for k in keep_rest:
             k.files.sort()
         if other.files:

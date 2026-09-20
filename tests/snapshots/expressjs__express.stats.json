@@ -3,11 +3,16 @@
     "empty": 0,
     "external": 197,
     "stem_collision": 0,
-    "unresolvable": 93
+    "unresolvable": 18
   },
+  "files_ignored": 109,
+  "files_skipped_oversized": 0,
+  "files_truncated": false,
+  "files_unsupported": 36,
   "imports_total": 314,
-  "resolution_rate": 0.076,
-  "resolved": 24,
-  "resolved_relative": 24,
+  "resolution_rate": 0.315,
+  "resolved": 99,
+  "resolved_alias": 0,
+  "resolved_relative": 99,
   "resolved_stem": 0
 }

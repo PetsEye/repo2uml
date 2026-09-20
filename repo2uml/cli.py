@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import __version__
 from . import abstract as ab
+from . import aliases as alias_mod
 from . import emit_puml as emit
 from . import graph as gmod
 from . import ingest, inventory
@@ -86,7 +87,8 @@ def main(argv: list[str] | None = None) -> int:
             print("No supported source files found.", file=sys.stderr)
             return 2
 
-        file_graph, gstats = gmod.build_graph(modules)
+        file_graph, gstats = gmod.build_graph(
+            modules, aliases=alias_mod.load_aliases(repo_root))
         comps = ab.cluster(modules, max_nodes=args.max_nodes, file_graph=file_graph,
                            entry_points=set(inv.entry_points))
         edges = ab.component_edges(comps, modules, file_graph)

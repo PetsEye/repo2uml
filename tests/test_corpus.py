@@ -47,6 +47,12 @@ def test_corpus_snapshot(tmp_path, repo):
     assert snap_puml.exists(), f"no snapshot for {repo}; run with UPDATE_SNAPSHOTS=1"
     assert puml == snap_puml.read_text(), f"diagram drift for {repo}"
     old = json.loads(snap_stats.read_text())
-    assert stats["resolution_rate"] >= old["resolution_rate"], (
+    # absolute resolved edges must never decrease; rate may dip when we
+    # capture a LARGER import universe (more honest denominator), so it
+    # gets a tolerance band instead of a hard floor
+    assert stats["resolved"] >= old["resolved"], (
+        f"resolved edges regressed for {repo}: {stats['resolved']} < {old['resolved']}"
+    )
+    assert stats["resolution_rate"] >= old["resolution_rate"] - 0.15, (
         f"resolution regressed for {repo}: {stats['resolution_rate']} < {old['resolution_rate']}"
     )

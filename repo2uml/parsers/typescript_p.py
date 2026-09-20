@@ -9,6 +9,7 @@ IMPORT_RES = [
     re.compile(r"""import\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]"""),
     re.compile(r"""require\s*\(\s*['"]([^'"]+)['"]\s*\)"""),
     re.compile(r"""import\s*\(\s*['"]([^'"]+)['"]\s*\)"""),
+    re.compile(r"""export\s+(?:\*|(?:\{[^}]*\}|[^'"]*?))\s+from\s+['"]([^'"]+)['"]"""),
 ]
 CLASS_RE = re.compile(r"(?:export\s+)?(?:default\s+)?class\s+(\w+)")
 FUNC_RE = re.compile(r"(?:export\s+)?(?:async\s+)?function\s+(\w+)")
@@ -42,8 +43,9 @@ def parse_typescript(rel: str, text: str) -> ModuleInfo:
             raw = m.group(1).strip()
             if not raw:
                 continue
-            # keep relative and @/-aliased imports as-is; external -> top package
-            if raw.startswith(".") or raw.startswith("@/"):
+            # keep relative and aliased imports as-is (@/, ~/, #xxx);
+            # external -> top package
+            if raw.startswith((".", "@/", "~/", "#")):
                 info.imports.append(raw)
             else:
                 info.imports.append(raw.split("/")[0].lstrip("@") or raw)

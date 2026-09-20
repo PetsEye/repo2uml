@@ -26,7 +26,6 @@ def test_stats_shape():
     assert fg["a.py"] == {"b.py"}
 
 
-@pytest.mark.xfail(strict=True, reason="export-from barrels not parsed (Phase 2)")
 def test_ts_barrel_reexport_chain():
     idx = parse_typescript("src/index.ts", "export * from './b';\n")
     b = parse_typescript("src/b.ts", "export const x = 1;\n")
@@ -35,7 +34,6 @@ def test_ts_barrel_reexport_chain():
     assert fg["src/index.ts"] == {"src/b.ts"}
 
 
-@pytest.mark.xfail(strict=True, reason="~/ alias not resolved (Phase 2)")
 def test_ts_tilde_alias():
     a = parse_typescript("src/app.ts", "import { x } from '~/lib/a';\n")
     lib = parse_typescript("src/lib/a.ts", "export const x = 1;\n")
@@ -43,7 +41,6 @@ def test_ts_tilde_alias():
     assert fg["src/app.ts"] == {"src/lib/a.ts"}
 
 
-@pytest.mark.xfail(strict=True, reason="ESM .js->.ts substitution missing (Phase 2)")
 def test_ts_esm_extension_substitution():
     a = parse_typescript("src/a.ts", "import './foo.js';\n")
     foo = parse_typescript("src/foo.ts", "export const x = 1;\n")
@@ -51,7 +48,6 @@ def test_ts_esm_extension_substitution():
     assert fg["src/a.ts"] == {"src/foo.ts"}
 
 
-@pytest.mark.xfail(strict=True, reason="relative level-only import dropped (Phase 2)")
 def test_python_relative_level_only():
     a = parse_python("pkg/a.py", "from . import auth\n")
     auth = parse_python("pkg/auth.py", "X = 1\n")
@@ -59,7 +55,6 @@ def test_python_relative_level_only():
     assert fg["pkg/a.py"] == {"pkg/auth.py"}
 
 
-@pytest.mark.xfail(strict=True, reason="__init__ chain not resolved (Phase 2)")
 def test_python_init_chain():
     init = parse_python("pkg/__init__.py", "from .b import X\n")
     b = parse_python("pkg/b.py", "X = 1\n")

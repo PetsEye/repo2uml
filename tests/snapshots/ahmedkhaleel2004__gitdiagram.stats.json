@@ -1,13 +1,18 @@
 {
   "dropped": {
     "empty": 0,
-    "external": 645,
+    "external": 278,
     "stem_collision": 3,
-    "unresolvable": 24
+    "unresolvable": 17
   },
-  "imports_total": 787,
-  "resolution_rate": 0.146,
-  "resolved": 115,
-  "resolved_relative": 107,
-  "resolved_stem": 8
+  "files_ignored": 44,
+  "files_skipped_oversized": 0,
+  "files_truncated": false,
+  "files_unsupported": 35,
+  "imports_total": 789,
+  "resolution_rate": 0.622,
+  "resolved": 491,
+  "resolved_alias": 367,
+  "resolved_relative": 115,
+  "resolved_stem": 9
 }

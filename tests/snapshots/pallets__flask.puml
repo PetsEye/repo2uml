@@ -2,9 +2,9 @@
 title Architecture (flask)
 skinparam componentStyle rectangle
 
-component [API (5 files)] as API <<entryPoint>>
+component [API (6 files)] as API <<entryPoint>>
 component [AuthService (2 files)] as AuthService
-component [Flask (15 files)] as Flask
+component [Flask (14 files)] as Flask
 component [FlaskStore (2 files)] as FlaskStore
 component [Database] as Database <<database>>
 

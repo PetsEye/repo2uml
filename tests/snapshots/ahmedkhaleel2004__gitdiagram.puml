@@ -3,26 +3,44 @@ title Architecture (next, react)
 skinparam componentStyle rectangle
 
 component [API (22 files)] as API <<entryPoint>>
-component [Components (23 files)] as Components
-component [Credentialdialog (8 files)] as Credentialdialog
+component [App (7 files)] as App
 component [Features (10 files)] as Features
-component [Graphplanner (17 files)] as Graphplanner
+component [Graphplanner (45 files)] as Graphplanner
 component [Hooks (9 files)] as Hooks
-component [Other (20 files)] as Other
-component [Repositoryworkspace (16 files)] as Repositoryworkspace
-component [Server (36 files)] as Server
+component [Lib (6 files)] as Lib
+component [Other (9 files)] as Other
+component [Repositoryworkspace (43 files)] as Repositoryworkspace
+component [Server (10 files)] as Server
 
-API --> Components
-API --> Credentialdialog
+API --> App
 API --> Features
 API --> Graphplanner
 API --> Hooks
+API --> Lib
 API --> Other
 API --> Repositoryworkspace
 API --> Server
-Components --> Server
-Graphplanner --> Other
-Hooks --> Components
-Other --> Components
-Server --> Other
+App --> API
+App --> Features
+App --> Graphplanner
+App --> Hooks
+App --> Lib
+App --> Other
+App --> Repositoryworkspace
+App --> Server
+Graphplanner --> Features
+Graphplanner --> Server
+Hooks --> API
+Hooks --> Features
+Hooks --> Lib
+Hooks --> Other
+Hooks --> Repositoryworkspace
+Other --> Graphplanner
+Repositoryworkspace --> API
+Repositoryworkspace --> Features
+Repositoryworkspace --> Hooks
+Repositoryworkspace --> Lib
+Repositoryworkspace --> Server
+Server --> Features
+Server --> Lib
 @enduml
