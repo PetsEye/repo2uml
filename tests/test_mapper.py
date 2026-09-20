@@ -136,3 +136,43 @@ def test_routes_ignore_comments_and_req_res():
         "r.post('/login', () => {});\n",
     )
     assert m.routes == ["/login"]
+
+
+def test_nextjs_route_files_are_api_not_keyword_matched():
+    # [username] contains "user" but these are route files by framework contract
+    for p in ("src/app/[username]/[repo]/page.tsx",
+              "src/app/api/chat/route.ts",
+              "src/app/layout.tsx"):
+        m = ModuleInfo(path=p, language="typescript")
+        name, layer = ab._classify(m)
+        assert name == "API", (p, name)
+
+
+def test_http_client_calls_are_not_routes():
+    m = parse_typescript(
+        "src/components/api-key-dialog.tsx",
+        "import axios from 'axios';\nconst api = axios.create({});\n"
+        "async function save() { await api.post('/key', { key }); }\n",
+    )
+    assert not m.routes
+
+
+def test_server_dir_services_are_not_api():
+    m = ModuleInfo(path="src/server/generate/mermaid.ts", language="typescript")
+    name, layer = ab._classify(m)
+    assert name == "Server", name
+    m2 = ModuleInfo(path="src/server/routes.ts", language="typescript")
+    assert ab._classify(m2)[0] == "API"
+
+
+def test_overflow_goes_to_other_not_into_real_nodes():
+    mods = [ModuleInfo(path=f"src/mod{i}/a.ts", language="typescript") for i in range(10)]
+    fg = {m.path: set() for m in mods}
+    comps = ab.cluster(mods, max_nodes=4, file_graph=fg)
+    by_name = {c.name: c for c in comps}
+    assert "Other" in by_name
+    assert len(by_name["Other"].files) == 6
+    # kept nodes stay pure single-file groups
+    for name, c in by_name.items():
+        if name != "Other":
+            assert len(c.files) == 1, (name, c.files)

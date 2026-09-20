@@ -20,6 +20,22 @@ ROLE_KEYWORDS = [
     (re.compile(r"api|route|controller|handler|endpoint|router|server|app", re.I), None, LAYER_API),
 ]
 
+# filenames / directory names that mark the serving layer (by convention)
+ENTRY_STEMS = {
+    "server", "api", "app", "main", "index", "routes", "router",
+    "controller", "controllers", "handler", "handlers",
+    "endpoint", "endpoints", "middleware",
+}
+ENTRY_DIRS = {"api", "routes", "routers", "controllers", "handlers", "endpoints"}
+
+# Next.js App/Pages Router conventions: these filenames ARE the route layer
+# by framework contract, regardless of their contents
+NEXT_ROUTE_FILES = {
+    "page", "layout", "loading", "route", "default", "template",
+    "error", "not-found", "global-error", "opengraph-image", "twitter-image",
+    "sitemap", "robots", "manifest", "middleware",
+}
+
 
 @dataclass
 class Component:
@@ -41,10 +57,21 @@ def _top_dir(path: str) -> str:
 def _classify(module: ModuleInfo) -> tuple[str, int]:
     p = module.path
     low = p.lower()
-    if module.has_routes or any(k in low for k in ("route", "controller", "handler", "endpoint", "api", "server", "app.")):
+    parts = p.split("/")
+    stem = parts[-1].rsplit(".", 1)[0].lower()
+    dirs = set(parts[:-1])
+    # serving layer by convention: real route registrations, serving filenames
+    # (server.ts, routes.py...), or serving directories (api/, controllers/...)
+    # — NOT bare substrings, so src/server/* services and res.get() call sites
+    # don't get misclassified
+    if module.has_routes or stem in ENTRY_STEMS or not dirs.isdisjoint(ENTRY_DIRS):
         # entry-ish; but auth routes belong to AuthService
         if re.search(r"auth|login|session", low):
             return "AuthService", LAYER_SERVICE
+        return "API", LAYER_API
+    if stem in NEXT_ROUTE_FILES and ("app" in parts or "pages" in parts):
+        # Next.js routing convention: page/layout/route.ts etc. are endpoints
+        # (checked before keyword matching so [username] doesn't fake AuthService)
         return "API", LAYER_API
     if module.has_models:
         # persistence wins over generic `user` keyword (UserStore, not AuthService)
@@ -135,10 +162,12 @@ def _cohesion_split(
     comps: list[Component],
     file_graph: dict[str, set[str]] | None,
     by_path: dict[str, ModuleInfo],
-) -> list[Component]:
+) -> tuple[list[Component], set[str]]:
+    """Split cohesive clusters out of grab-bag dirs. Returns (comps, chunk_names)."""
     if not file_graph:
-        return comps
+        return comps, set()
     out: list[Component] = []
+    chunks_made: set[str] = set()
     for c in comps:
         if c.name in ("API", "Database") or len(c.files) < MIN_SPLIT_SIZE:
             out.append(c)
@@ -166,13 +195,25 @@ def _cohesion_split(
             out.append(c)
         for ch in chunks:
             name = _chunk_name(ch, file_graph)
+            chunks_made.add(name)
             out.append(Component(
                 name=name,
                 layer=c.layer,
                 files=sorted(ch),
                 classes=sorted({cl for f in ch for cl in by_path.get(f, ModuleInfo(f, "")).classes}),
             ))
-    return out
+    return out, chunks_made
+
+
+def _area(files: list[str]) -> str:
+    """Most common top-2-dir prefix, e.g. src/server — the file's neighbourhood."""
+    counts: dict[str, int] = {}
+    for f in files:
+        key = "/".join(f.split("/")[:2])
+        counts[key] = counts.get(key, 0) + 1
+    if not counts:
+        return ""
+    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
 
 
 def cluster(
@@ -205,7 +246,7 @@ def cluster(
 
     comps = list(groups.values())
     by_path = {m.path: m for m in modules}
-    comps = _cohesion_split(comps, file_graph, by_path)
+    comps, chunk_names = _cohesion_split(comps, file_graph, by_path)
     # merge util/config-like small groups into neighbours later; first ensure Database exists
     has_db = any(c.name == "Database" for c in comps)
     stores = [c for c in comps if c.name.endswith("Store")]
@@ -215,7 +256,10 @@ def cluster(
     elif not has_db and any(m.has_models for m in modules):
         comps.append(Component(name="Database", layer=LAYER_STORE))
 
-    # trim to max_nodes: keep API + Database, drop smallest logic groups (merge into Core)
+    # trim to max_nodes: keep API + Database, collect overflow into an
+    # honestly-labeled Other node (never merge strays into a real component —
+    # that silently corrupts its meaning, e.g. a 7-file dialog node bloating
+    # to 51 files of scripts, server leftovers and setup files)
     comps.sort(key=lambda c: (c.layer, -len(c.files), c.name))
     pinned = [c for c in comps if c.name in ("API", "Database")]
     rest = [c for c in comps if c.name not in ("API", "Database")]
@@ -224,21 +268,29 @@ def cluster(
     budget = max(2, max_nodes)
     keep_rest = rest[: max(0, budget - len(pinned))]
     dropped = rest[len(keep_rest):]
-    if dropped:
-        core = next((c for c in keep_rest if c.name == "Core"), None)
-        if core is None:
-            core = Component(name="Core", layer=LAYER_LOGIC)
-            # insert by layer order later
-            if len(pinned) + len(keep_rest) < budget:
-                keep_rest.append(core)
-            else:
-                # merge into smallest kept
-                core = keep_rest[-1] if keep_rest else None
-        if core is not None:
-            for d in dropped:
-                core.files.extend(d.files)
-                core.classes.extend(d.classes)
     comps = pinned + keep_rest
+    if dropped:
+        # return strays to the kept group from the same area (src/server chunk
+        # rejoins Server) — but never into a cohesion chunk (keeps it pure)
+        # and never into API/Database (keeps entry semantics pure);
+        # true miscellany lands in Other
+        other = Component(name="Other", layer=LAYER_LOGIC)
+        for d in dropped:
+            area = _area(d.files)
+            target = next(
+                (k for k in keep_rest
+                 if k.name not in chunk_names and _area(k.files) == area),
+                None,
+            )
+            dest = target if target is not None else other
+            dest.files.extend(d.files)
+            dest.classes.extend(d.classes)
+        for k in keep_rest:
+            k.files.sort()
+        if other.files:
+            other.files.sort()
+            other.classes = sorted(set(other.classes))
+            comps.append(other)
     # final ordering: API first, services, logic, stores, Database last
     order = {"API": -1, "Database": 99}
     comps.sort(key=lambda c: (order.get(c.name, c.layer * 10), c.name))
@@ -281,13 +333,14 @@ def component_edges(
             edges.add((a, b))
 
     # semantic backbone so diagrams read top-down even when imports are sparse
+    # (Other is excluded: it's a miscellany bucket, backbone edges to it are noise)
     if "API" in names:
         for c in comps:
-            if c.name != "API" and c.layer in (1, 2):
+            if c.name not in ("API", "Other") and c.layer in (1, 2):
                 # API depends on services/logic (only add if no contradictory edge flood)
                 link("API", c.name)
     # services -> stores/database
-    services = [c.name for c in comps if by_name[c.name].layer in (1, 2)]
+    services = [c.name for c in comps if c.name != "Other" and by_name[c.name].layer in (1, 2)]
     stores = [c.name for c in comps if by_name[c.name].layer == 3]
     for s in services:
         for t in stores:

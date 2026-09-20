@@ -56,10 +56,13 @@ def parse_typescript(rel: str, text: str) -> ModuleInfo:
     for m in re.finditer(r"@(?:Get|Post|Put|Delete|Patch|Route)\s*\(\s*['\"`]([^'\"`]*)", text):
         info.routes.append(m.group(1) or "(route)")
     # Express-style: app.get('/x'), router.post(...), r.get(...) — any ident,
-    # path-like first arg. req/res/ctx never register routes (res.get('Header')).
+    # path-like first arg. Excluded receivers never register routes:
+    # req/res/ctx = request objects (res.get('Header')); api/client/http/axios
+    # = HTTP *client* instances (api.post('/key', data)).
     for m in re.finditer(r"""\b(\w+)\s*\.\s*(get|post|put|delete|patch|use|all)\s*\(\s*['"`]([^'"`]*)""", text):
         recv, method, first = m.group(1), m.group(2), m.group(3)
-        if recv.lower() in ("req", "res", "request", "response", "ctx", "reply", "c"):
+        if recv.lower() in ("req", "res", "request", "response", "ctx", "reply", "c",
+                            "api", "client", "http", "axios"):
             continue
         if first.startswith(("/", ":", "*")) or first == "":
             info.routes.append(first or "(route)")
